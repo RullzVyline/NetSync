@@ -18,7 +18,13 @@ A high-performance, strictly-typed networking framework for Roblox. NetSync V2 a
 ## Usage & API
 
 ### 1. Installation
-Place the `NetSync` folder (containing `init.luau`, `Serializer.luau`, and `Types.luau`) into `ReplicatedStorage`. 
+Download the `NetSync.rbxm` file from the **Releases** tab and insert it into `ReplicatedStorage`, or use **Rojo** to sync the repository into your project.
+
+```json
+"NetSync": {
+  "$path": "path/to/NetSync/src"
+}
+```
 
 ### 2. Defining Schemas
 Unlike normal `RemoteEvents`, you must define exactly what your data looks like for the Binary Serializer.

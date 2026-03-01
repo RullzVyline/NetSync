@@ -18,7 +18,13 @@ Kerangka kerja (framework) jaringan berperforma tinggi dengan tipe data ketat (*
 ## Penggunaan & API
 
 ### 1. Instalasi
-Letakkan folder `NetSync` (yang berisi `init.luau`, `Serializer.luau`, dan `Types.luau`) di dalam `ReplicatedStorage`. 
+Unduh file `NetSync.rbxm` terbaru dari tab **Releases** dan letakkan ke dalam `ReplicatedStorage`, atau gunakan plugin sinkronisasi **Rojo** untuk memuat repositori ini ke studi Anda.
+
+```json
+"NetSync": {
+  "$path": "path/to/NetSync/src"
+}
+```
 
 ### 2. Mendefinisikan Skema (*Schema*)
 Tidak seperti `RemoteEvent` biasa, Anda diwajibkan menjabarkan secara rapi seperti apa wujud data Anda sebelum digencet menjadi bits biner.
