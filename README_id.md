@@ -1,4 +1,4 @@
-# NetSync
+# NetSync V2
 
 <div align="center">
   <img src="logo.png" alt="NetSync Logo" width="300" />
@@ -6,70 +6,82 @@
 
 *[Read in English](README.md)*
 
-Kerangka kerja (framework) jaringan satu-modul untuk Roblox. Mengimplementasikan arsitektur RemoteEvent tunggal yang dilengkapi fitur *payload batching* dan *rate limiting* berbasis *token-bucket*.
+Kerangka kerja (framework) jaringan berperforma tinggi dengan tipe data ketat (*strict-typing*) untuk Roblox. NetSync V2 sepenuhnya meninggalkan tabel data tradisional dan berpindah ke **zero-allocation binary buffer serialization**, menciptakan lingkungan super cepat dan aman untuk menangani ribuan pengiriman per detik.
 
-## Fitur
-- **Strict Typing:** Ditulis seluruhnya menggunakan strict Luau.
-- **Identifier Compression:** Secara otomatis menghash string nama event menjadi integer 16-bit via DJB2, memangkas drastis penggunaan *bandwidth*.
-- **Payload Batching:** Secara otomatis mengantrekan permintaan klien dan menembakkannya secara kolektif di akhir satu *frame* melalui `RunService.Heartbeat`.
-- **Rate Limiting:** Algoritma *token-bucket* pada sisi server untuk mengatur frekuensi permintaan data yang masuk dari tiap pemain.
-- **Arsitektur Remote Tunggal:** Merutekan seluruh lalu lintas data melalui satu `RemoteEvent` yang dibuat secara dinamis.
+## Fitur Utama
+- **Skema Jaringan Ketat:** Berbagai *Packet* data harus didefinisikan secara konkrit (seperti U8, F32, Array, Struct). Ini memusnahkan transmisi Tabel Lua di dalam jaringan.
+- **Zero-Allocation Buffers:** Menulis dan membaca data biner di atas satu Buffer berkelanjutan tanpa memicu *Garbage Collection Spikes*.
+- **Payload Batching:** Mengantrekan seluruh panggilan `Fire` dan memempatkannya dalam satu paket masif di setiap pergantian *frame* via `RunService.Heartbeat`.
+- **Advanced Hash Generation:** Menggunakan algoritma hash 32-bit FNV-1a secara otomatis sebagai pengganti teks panjang, menjamin tidak ada tumpang-tindih (*zero collisions*).
+- **Anti Eksploitasi & Anti DDoS:** Terlindungi lewat sistem *Rate Limiting* di sisi server, penjagaan ketat pada batas string (Maks 65535 byte), pengamanan *pcall* yang absolut, dan pelompatan aman (*safe skip*) terhadap korupsi data.
 
-## Metrik Performa (V1.5)
-Di bawah tekanan *stress test* tersimulasi yang melibatkan 50 pemain tempur dengan lebih dari 3.300+ paket data masuk berkecepatan tinggi per detik:
-- **Server CPU Time:** Tetap stabil sempurna pada ~16.1ms (batas 60 FPS) saat diuji dari dalam Roblox Studio penuh jendela.
-- **Total DataCost:** Ratusan event dari puluhan pemain berhasil dikompresi menjadi pengeluaran hanya ~161 KB/s data agregat keseluruhan.
-- **Network Ping:** Stabil di angka 0-15ms, dengan membuktikan batas hambatan penumpukan *packet* sama dengan nol.
-
-## Penggunaan
+## Penggunaan & API
 
 ### 1. Instalasi
-Letakkan ModuleScript `NetSync.luau` ke dalam `ReplicatedStorage`. 
+Letakkan folder `NetSync` (yang berisi `init.luau`, `Serializer.luau`, dan `Types.luau`) di dalam `ReplicatedStorage`. 
 
-### 2. Contoh Penggunaan
+### 2. Mendefinisikan Skema (*Schema*)
+Tidak seperti `RemoteEvent` biasa, Anda diwajibkan menjabarkan secara rapi seperti apa wujud data Anda sebelum digencet menjadi bits biner.
 
-**Contoh Kode Server**
 ```lua
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local NetSync = require(ReplicatedStorage.NetSync)
+local NetSync = require(ReplicatedStorage:WaitForChild("NetSync"))
 
--- Opsional: Konfigurasi batas permintaan, default adalah 20 req/s
-NetSync.configureRateLimit({
-    MaxRequestsPerSecond = 30,
-    Punishment = "Drop" -- Opsi: "Drop" atau "Kick"
+local PlayerDamageSchema = NetSync.Types.Struct({
+    TargetId = NetSync.Types.U32,      
+    Damage = NetSync.Types.F32,        
+    IsCritical = NetSync.Types.Boolean,
+    WeaponType = NetSync.Types.String  
 })
 
--- Mendengarkan (listen) sebuah sinyal event
-NetSync.listen("WeaponFire", function(player, data)
-    print(`Menerima data senjata dari {player.Name}`)
-    NetSync.fire(player, "HitConfirmation", { target = data.target })
-end)
+-- Mendaftarkan Packet
+local DamagePacket = NetSync.Packet("DamagePlayer", PlayerDamageSchema)
 ```
 
-**Contoh Kode Client**
+### 3. Sisi Server
 ```lua
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local NetSync = require(ReplicatedStorage.NetSync)
+-- Opsional: Konfigurasi batas permintaan spam (Default: 200 tembakan per detik, Hukuman Drop)
+NetSync.ConfigureRateLimit({
+    MaxRequestsPerSecond = 200,
+    Punishment = "Drop" -- "Drop" | "Kick"
+})
 
--- Mendengarkan event dari server
-NetSync.listen("HitConfirmation", function(data)
-    print(`Server mengonfirmasi hit pada: {data.target}`)
+-- Mendengarkan Sinyal yang masuk
+local disconnect = DamagePacket.Listen(function(player, data)
+    print(`Menerima damage: {data.Damage} dari {player.Name}`)
+    -- Menembak kembali peluru jaringan ke klien tersebut
+    DamagePacket.FireClient(player, data)
 end)
 
--- Menembakkan event (akan diproses batch secara otomatis)
-NetSync.fire("WeaponFire", { target = "Model1" })
-NetSync.fire("UpdatePosition", { x = 10, y = 20 })
+-- Untuk mencegah memory leak pada sistem jangka panjang:
+-- disconnect() 
 ```
 
-## Referensi API
+### 4. Sisi Client
+```lua
+-- Mendengarkan Event dari Server
+DamagePacket.Listen(function(player, data)
+    -- Di Client, argumen pertama 'player' akan memuat 'data' itu sendiri
+    -- Lebih dianjurkan menangani nilainya menggunakan logika amannya di NetSync_Tutorial.luau
+    print(`Server mengonfirmasi hit!`)
+end)
 
-### `NetSync` (Fungsi Bersama / Shared)
-- `listen(eventName: string, callback: (...any) -> ())`: Memasang *listener* pada sebuah event.
+-- Menembakkan Sinyal (Akan di antre dan dikirim saat Heartbeat)
+DamagePacket.FireServer({
+    TargetId = 1234567,
+    Damage = 45.2,
+    IsCritical = true,
+    WeaponType = "Excalibur"
+})
+```
 
-### `NetSync` (Fungsi Khusus Server)
-- `fire(player: Player, eventName: string, data: any)`: Mengirim *payload* data ke satu pemain tertentu.
-- `fireAll(eventName: string, data: any)`: Mengirim *payload* data ke semua pemain yang terkoneksi.
-- `configureRateLimit(config: RateLimitConfig)`: Memperbarui konfigurasi *rate-limiting*.
-
-### `NetSync` (Fungsi Khusus Client)
-- `fire(eventName: string, data: any)`: Memasukkan *payload* data ke dalam antrean untuk dikirim ke server pada pergerakan layar (*frame*) berikutnya.
+## Tipe Skema yang Tersedia (`NetSync.Types`)
+- `U8`, `U16`, `U32` (Integer Tak Bertanda / Nol ke Atas)
+- `I8`, `I16`, `I32` (Integer Bertanda / Minus ke Atas)
+- `F32`, `F64` (Bisa menampung angka Desimal)
+- `Boolean`
+- `String` (Batas memori dinamis maksimum 65535 byte)
+- `Vector3`
+- `CFrame`
+- `Array(Tipe_Data_Di_Dalamnya)`
+- `Struct({ [string] = Tipe_Data_Di_Dalamnya })`
