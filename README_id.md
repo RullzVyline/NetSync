@@ -1,5 +1,9 @@
 # NetSync
 
+<div align="center">
+  <img src="logo.png" alt="NetSync Logo" width="300" />
+</div>
+
 *[Read in English](README.md)*
 
 Kerangka kerja (framework) jaringan satu-modul untuk Roblox. Mengimplementasikan arsitektur RemoteEvent tunggal yang dilengkapi fitur *payload batching* dan *rate limiting* berbasis *token-bucket*.

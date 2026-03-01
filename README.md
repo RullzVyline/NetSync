@@ -1,5 +1,9 @@
 # NetSync
 
+<div align="center">
+  <img src="logo.png" alt="NetSync Logo" width="300" />
+</div>
+
 *[Baca dalam Bahasa Indonesia](README_id.md)*
 
 A single-module networking framework for Roblox. It implements a single RemoteEvent architecture with payload batching and token-bucket rate limiting.
